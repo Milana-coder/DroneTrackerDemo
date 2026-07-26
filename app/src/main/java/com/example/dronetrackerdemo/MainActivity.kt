@@ -40,7 +40,6 @@ class MainActivity : ComponentActivity() {
 }
 
 
-
 @Composable
 fun DroneTrackerScreen() {
 
@@ -50,10 +49,27 @@ fun DroneTrackerScreen() {
     }
 
 
-    // Координаты Харькова
-    val kharkiv = LatLng(
-        49.9935,
-        36.2304
+    // Список дронов
+    val drones = listOf(
+
+        Drone(
+            id = 1,
+            name = "Drone 1",
+            position = LatLng(49.9935, 36.2304)
+        ),
+
+        Drone(
+            id = 2,
+            name = "Drone 2",
+            position = LatLng(50.0150, 36.2700)
+        ),
+
+        Drone(
+            id = 3,
+            name = "Drone 3",
+            position = LatLng(49.9750, 36.1800)
+        )
+
     )
 
 
@@ -61,7 +77,7 @@ fun DroneTrackerScreen() {
     val cameraPositionState = rememberCameraPositionState {
 
         position = CameraPosition.fromLatLngZoom(
-            kharkiv,
+            drones.first().position,
             12f
         )
 
@@ -114,7 +130,6 @@ fun DroneTrackerScreen() {
                 text = if (monitoring)
 
                     "🟢 Мониторинг активен"
-
                 else
 
                     "⚪ Мониторинг остановлен",
@@ -148,7 +163,6 @@ fun DroneTrackerScreen() {
                     text = if (monitoring)
 
                         "Остановить мониторинг"
-
                     else
 
                         "Запустить мониторинг"
@@ -189,24 +203,21 @@ fun DroneTrackerScreen() {
 
 
                 ) {
+                    drones.forEach { drone ->
 
+                        Marker(
 
-                    val markerState = remember {
-                        MarkerState(
-                            position = kharkiv
+                            state = MarkerState(
+                                position = drone.position
+                            ),
+
+                            title = drone.name,
+
+                            snippet = "Обнаружен"
+
                         )
+
                     }
-
-
-                    Marker(
-
-                        state = markerState,
-
-                        title = "Точка мониторинга",
-
-                        snippet = "Харьков"
-
-                    )
 
 
                 }
