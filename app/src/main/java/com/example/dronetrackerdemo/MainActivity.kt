@@ -22,7 +22,8 @@ import com.google.maps.android.compose.MapProperties
 import com.google.maps.android.compose.MapType
 import com.google.maps.android.compose.rememberCameraPositionState
 
-
+import com.example.dronetrackerdemo.simulator.DroneSimulator
+import kotlinx.coroutines.delay
 class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -50,28 +51,42 @@ fun DroneTrackerScreen() {
 
 
     // Список дронов
-    val drones = listOf(
+    val drones = remember {
 
-        Drone(
-            id = 1,
-            name = "Drone 1",
-            position = LatLng(49.9935, 36.2304)
-        ),
+        mutableStateListOf(
 
-        Drone(
-            id = 2,
-            name = "Drone 2",
-            position = LatLng(50.0150, 36.2700)
-        ),
+            Drone(
+                id = 1,
+                name = "Drone 1",
+                LatLng(49.9935, 36.2304)
+            ),
 
-        Drone(
-            id = 3,
-            name = "Drone 3",
-            position = LatLng(49.9750, 36.1800)
+            Drone(
+                id = 2,
+                name = "Drone 2",
+                LatLng(50.0150, 36.2700)
+            ),
+
+            Drone(
+                id = 3,
+                name = "Drone 3",
+               LatLng(49.9750, 36.1800)
+            )
+
         )
 
-    )
+    }
+    LaunchedEffect(monitoring) {
 
+        while (monitoring) {
+
+            DroneSimulator.move(drones)
+
+            delay(500)
+
+        }
+
+    }
 
     // Камера карты
     val cameraPositionState = rememberCameraPositionState {
