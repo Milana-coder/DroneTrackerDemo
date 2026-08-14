@@ -1,1 +1,2 @@
 app/src/main/assets/*.js linguist-vendored
+app/src/main/assets/leaflet.css linguist-vendored
