@@ -13,3 +13,6 @@
 .externalNativeBuild
 .cxx
 local.properties
+/android-app/
+/android-app_BACKUP/
+/.idea/

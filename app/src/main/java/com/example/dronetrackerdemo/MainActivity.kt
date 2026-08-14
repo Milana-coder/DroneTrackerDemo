@@ -1,5 +1,14 @@
 package com.example.dronetrackerdemo
 
+import com.google.android.gms.maps.model.BitmapDescriptorFactory
+import android.Manifest
+import android.content.pm.PackageManager
+
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+
+import androidx.core.content.ContextCompat
+import androidx.compose.ui.platform.LocalContext
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -14,19 +23,21 @@ import androidx.compose.ui.unit.dp
 
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
+import com.google.android.gms.maps.model.CircleOptions
+import androidx.compose.ui.graphics.Color
 
-import com.google.maps.android.compose.GoogleMap
-import com.google.maps.android.compose.Marker
-import com.google.maps.android.compose.MarkerState
-import com.google.maps.android.compose.MapProperties
-import com.google.maps.android.compose.MapType
-import com.google.maps.android.compose.rememberCameraPositionState
+import com.google.maps.android.compose.*
 
-import com.example.dronetrackerdemo.simulator.DroneSimulator
+import com.example.dronetrackerdemo.data.AirObject
+import com.example.dronetrackerdemo.data.RetrofitClient
+
 import kotlinx.coroutines.delay
+
+
 class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
+
         super.onCreate(savedInstanceState)
 
         setContent {
@@ -36,131 +47,114 @@ class MainActivity : ComponentActivity() {
                 DroneTrackerScreen()
 
             }
-        }
-    }
-}
 
+        }
+
+    }
+
+}
 
 @Composable
 fun DroneTrackerScreen() {
-
 
     var monitoring by remember {
         mutableStateOf(false)
     }
 
+    // реальные объекты с Flask
 
-    // Список дронов
-    val drones = remember {
+    var airObjects by remember {
 
-        mutableStateListOf(
-
-            Drone(
-                id = 1,
-                name = "Drone 1",
-                LatLng(49.9935, 36.2304)
-            ),
-
-            Drone(
-                id = 2,
-                name = "Drone 2",
-                LatLng(50.0150, 36.2700)
-            ),
-
-            Drone(
-                id = 3,
-                name = "Drone 3",
-               LatLng(49.9750, 36.1800)
-            )
-
-        )
+        mutableStateOf<List<AirObject>>(emptyList())
 
     }
+    val context = LocalContext.current
+
+    var locationPermissionGranted by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(
+                context, Manifest.permission.ACCESS_FINE_LOCATION
+            ) == PackageManager.PERMISSION_GRANTED
+        )
+    }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        locationPermissionGranted = granted
+    }
+
+
+    // запрос к серверу
     LaunchedEffect(monitoring) {
 
         while (monitoring) {
 
-            DroneSimulator.move(drones)
+            try {
 
-            delay(500)
+                airObjects = RetrofitClient.api.getObjects()
+
+            } catch (e: Exception) {
+
+                println("ОШИБКА API: ${e.message}")
+
+            }
+
+            delay(3000)
+
+        }
+    }
+
+// ВОТ СЮДА ВСТАВЛЯЕМ
+
+    LaunchedEffect(Unit) {
+
+        if (!locationPermissionGranted) {
+
+            permissionLauncher.launch(
+                Manifest.permission.ACCESS_FINE_LOCATION
+            )
 
         }
 
     }
 
-    // Камера карты
     val cameraPositionState = rememberCameraPositionState {
-
         position = CameraPosition.fromLatLngZoom(
-            drones.first().position,
-            12f
+            LatLng(51.8, 32.2), 8f
         )
-
     }
-
-
 
     Scaffold(
 
         topBar = {
 
-            Surface(
-                shadowElevation = 4.dp
-            ) {
+            Text(
 
-                Text(
+                text = "🚁 Real Air Monitor",
 
-                    text = "🚁 Drone Tracker Demo",
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
 
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
+                style = MaterialTheme.typography.titleLarge
 
-                    style = MaterialTheme.typography.titleLarge
-
-                )
-
-            }
+            )
 
         }
 
-
     ) { padding ->
-
 
         Column(
 
             modifier = Modifier
                 .padding(padding)
                 .fillMaxSize()
-                .padding(20.dp),
+                .padding(16.dp),
 
             horizontalAlignment = Alignment.CenterHorizontally
 
         ) {
-
-
-            Text(
-
-                text = if (monitoring)
-
-                    "🟢 Мониторинг активен"
-                else
-
-                    "⚪ Мониторинг остановлен",
-
-
-                style = MaterialTheme.typography.titleMedium
-
-            )
-
-
-
-            Spacer(
-                modifier = Modifier.height(20.dp)
-            )
-
-
 
             Button(
 
@@ -175,33 +169,37 @@ fun DroneTrackerScreen() {
 
                 Text(
 
-                    text = if (monitoring)
+                    if (monitoring)
 
                         "Остановить мониторинг"
                     else
 
                         "Запустить мониторинг"
-
                 )
 
             }
 
-
-
             Spacer(
-                modifier = Modifier.height(20.dp)
+                Modifier.height(20.dp)
             )
 
+            Text(
 
+                text = "Объектов: ${airObjects.size}"
+
+            )
+
+            Spacer(
+                Modifier.height(20.dp)
+            )
 
             Card(
 
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(350.dp)
+                    .height(500.dp)
 
             ) {
-
 
                 GoogleMap(
 
@@ -209,42 +207,114 @@ fun DroneTrackerScreen() {
 
                     cameraPositionState = cameraPositionState,
 
-
                     properties = MapProperties(
-
                         mapType = MapType.HYBRID
-
                     )
 
-
                 ) {
-                    drones.forEach { drone ->
+
+                    val droneIcon = remember {
+                        BitmapDescriptorFactory.defaultMarker(
+                            BitmapDescriptorFactory.HUE_RED
+                        )
+                    }
+
+                    airObjects.forEach { obj ->
+
+
+                        val position = LatLng(
+                            obj.lat, obj.lon
+                        )
+
+                        val place = when {
+
+                            !obj.locality.isNullOrBlank() && !obj.region.isNullOrBlank() -> "${obj.locality}, ${obj.region}"
+
+                            !obj.locality.isNullOrBlank() -> obj.locality
+
+                            !obj.region.isNullOrBlank() -> obj.region
+
+                            else -> "Место неизвестно"
+                        }
 
                         Marker(
 
                             state = MarkerState(
-                                position = drone.position
+                                position = position
                             ),
 
-                            title = drone.name,
+                            icon = droneIcon,
 
-                            snippet = "Обнаружен"
+                            title = obj.name,
+
+                            snippet = """
+📍 $place
+
+🚀 ${obj.speed} км/ч
+
+🧭 ${obj.heading}°
+
+🟢 ${obj.confidence.uppercase()}
+
+👥 Подтверждений: ${obj.sources}
+
+Статус: ${obj.status}
+                """.trimIndent()
 
                         )
 
+                        if (obj.trail.size > 1) {
+
+                            Polyline(
+
+                                points = obj.trail.map {
+
+                                    LatLng(
+                                        it.lat, it.lon
+                                    )
+
+                                }
+
+                            )
+
+                        }
+
+                        Polyline(
+
+                            points = listOf(
+
+                                position,
+
+                                calculateDirectionPoint(
+                                    position, obj.heading.toDouble()
+                                )
+                            )
+                        )
                     }
-
-
                 }
-
-
             }
-
-
         }
-
-
     }
 
+}
+fun calculateDirectionPoint(
+
+    position: LatLng,
+
+    heading: Double,
+
+    distance: Double = 0.05
+
+): LatLng {
+
+    val radians = Math.toRadians(heading)
+
+    return LatLng(
+
+        position.latitude + distance * kotlin.math.cos(radians),
+
+        position.longitude + distance * kotlin.math.sin(radians)
+
+    )
 
 }

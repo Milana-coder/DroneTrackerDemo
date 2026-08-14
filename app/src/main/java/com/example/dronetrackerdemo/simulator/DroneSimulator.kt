@@ -2,6 +2,7 @@ package com.example.dronetrackerdemo.simulator
 
 import com.example.dronetrackerdemo.Drone
 import com.google.android.gms.maps.model.LatLng
+import kotlin.math.atan2
 
 object DroneSimulator {
 
@@ -9,16 +10,25 @@ object DroneSimulator {
 
         drones.forEach { drone ->
 
-            drone.position = LatLng(
+            val oldPosition = drone.position
 
-                drone.position.latitude + randomStep(),
+            val latStep = randomStep()
+            val lonStep = randomStep()
 
-                drone.position.longitude + randomStep()
-
+            val newPosition = LatLng(
+                oldPosition.latitude + latStep,
+                oldPosition.longitude + lonStep
             )
 
-        }
+            // Определяем направление движения
+            val angle = Math.toDegrees(
+                atan2(lonStep, latStep)
+            )
 
+            drone.heading = (angle + 360) % 360
+
+            drone.position = newPosition
+        }
     }
 
     private fun randomStep(): Double {
