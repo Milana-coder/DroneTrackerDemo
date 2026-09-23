@@ -7,4 +7,6 @@ interface AirApi {
     @GET("objects")
     suspend fun getObjects(): List<AirObject>
 
+    @GET("alerts")
+    suspend fun getAlerts(): AlertResponse
 }

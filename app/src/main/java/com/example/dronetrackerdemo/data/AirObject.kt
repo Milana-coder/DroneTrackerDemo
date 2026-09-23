@@ -26,6 +26,8 @@ data class AirObject(
 
     val locality: String?,
 
-    val trail: List<TrailPoint> = emptyList()
+    val trail: List<TrailPoint> = emptyList(),
+
+    val speedKnown: Boolean = false
 
 )
