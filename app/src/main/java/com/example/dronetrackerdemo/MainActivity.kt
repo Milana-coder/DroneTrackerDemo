@@ -1,3 +1,4 @@
+
 package com.example.dronetrackerdemo
 
 import android.Manifest
@@ -79,8 +80,8 @@ class MainActivity : ComponentActivity() {
 fun DroneTrackerScreen() {
 
     // =========================================================
-    // СОСТОЯНИЕ
-    // =========================================================
+// СОСТОЯНИЕ
+// =========================================================
 
     var monitoring by remember {
         mutableStateOf(false)
@@ -92,6 +93,10 @@ fun DroneTrackerScreen() {
 
     var alerts by remember {
         mutableStateOf<List<Alert>>(emptyList())
+    }
+
+    var alertStatuses by remember {
+        mutableStateOf("")
     }
 
     var oblastPolygons by remember {
@@ -106,19 +111,17 @@ fun DroneTrackerScreen() {
         mutableStateOf<Map<String, List<RaionPolygon>>>(emptyMap())
     }
 
-    // Выбранная область
+// Выбранная область
     var selectedOblastName by remember {
         mutableStateOf<String?>(null)
     }
 
-    // Выбранный район
+// Выбранный район
     var selectedRaionName by remember {
         mutableStateOf<String?>(null)
     }
 
     val context = LocalContext.current
-
-
     // =========================================================
     // ГЕОЛОКАЦИЯ
     // =========================================================
@@ -195,21 +198,30 @@ fun DroneTrackerScreen() {
 
         while (monitoring) {
 
-            try {
+            // =================================================
+            // ОБЪЕКТЫ NEPTUN
+            // =================================================
 
-                // -------------------------------------------------
-                // ОБЪЕКТЫ
-                // -------------------------------------------------
+            try {
 
                 val newObjects =
                     RetrofitClient.api.getObjects()
 
                 airObjects = newObjects
 
+            } catch (e: Exception) {
 
-                // -------------------------------------------------
-                // ТРЕВОГИ
-                // -------------------------------------------------
+                println(
+                    "ОШИБКА OBJECTS: ${e.message}"
+                )
+            }
+
+
+            // =================================================
+            // АКТИВНЫЕ ТРЕВОГИ
+            // =================================================
+
+            try {
 
                 val alertResponse =
                     RetrofitClient.api.getAlerts()
@@ -218,24 +230,70 @@ fun DroneTrackerScreen() {
 
                     alerts = alertResponse.alerts
 
-                }
+                } else {
 
-                println(
-                    "АЛЕРТЫ: ${alerts.size}"
-                )
+                    println(
+                        "ALERTS: сервер вернул success=false, " +
+                                "error=${alertResponse.error}"
+                    )
+                }
 
             } catch (e: Exception) {
 
                 println(
-                    "ОШИБКА API: ${e.message}"
+                    "ОШИБКА ALERTS: ${e.message}"
                 )
-
             }
 
+
+            // =================================================
+            // АКТУАЛЬНЫЕ СТАТУСЫ ТРЕВОГ
+            // =================================================
+
+            try {
+
+                val statusResponse =
+                    RetrofitClient.api.getAlertStatuses()
+
+                if (statusResponse.success) {
+
+                    alertStatuses = statusResponse.statuses
+
+                    println(
+                        "СТАТУСЫ: получено ${alertStatuses.length} символов"
+                    )
+
+                    println(
+                        "СТАТУСЫ ОБЛАСТЕЙ: " +
+                                "Полтава=${alertStatuses.getOrNull(19)}, " +
+                                "Сумы=${alertStatuses.getOrNull(20)}, " +
+                                "Харьков=${alertStatuses.getOrNull(22)}, " +
+                                "Донецк=${alertStatuses.getOrNull(28)}, " +
+                                "Запорожье=${alertStatuses.getOrNull(12)}"
+                    )
+
+                } else {
+
+                    println(
+                        "СТАТУСЫ: сервер вернул success=false, " +
+                                "error=${statusResponse.error}"
+                    )
+                }
+
+            } catch (e: Exception) {
+
+                println(
+                    "ОШИБКА STATUSES: ${e.message}"
+                )
+            }
+
+
+            println(
+                "АЛЕРТЫ: ${alerts.size}"
+            )
+
             delay(3000)
-
         }
-
     }
 
 
@@ -415,6 +473,53 @@ fun DroneTrackerScreen() {
 
         }
 
+// =========================================================
+// АКТУАЛЬНАЯ СТАТИСТИКА ТРЕВОГ
+// =========================================================
+
+// UID областей и городов со специальным статусом
+    val oblastUids = listOf(
+        3,   // Хмельницкая
+        4,   // Винницкая
+        5,   // Ровненская
+        8,   // Волынская
+        9,   // Днепропетровская
+        10,  // Житомирская
+        11,  // Закарпатская
+        12,  // Запорожская
+        13,  // Ивано-Франковская
+        14,  // Киевская область
+        15,  // Кировоградская
+        16,  // Луганская
+        17,  // Николаевская
+        18,  // Одесская
+        19,  // Полтавская
+        20,  // Сумская
+        21,  // Тернопольская
+        22,  // Харьковская
+        23,  // Херсонская
+        24,  // Черкасская
+        25,  // Черниговская
+        26,  // Черновицкая
+        27,  // Львовская
+        28,  // Донецкая
+        29,  // АР Крым
+        30,  // Севастополь
+        31   // Киев
+    )
+
+    val fullyAlertedOblasts =
+        oblastUids.count { uid ->
+            alertStatuses.getOrNull(uid) == 'A'
+        }
+
+    val partiallyAlertedOblasts =
+        oblastUids.count { uid ->
+            alertStatuses.getOrNull(uid) == 'P'
+        }
+
+    val currentAlertedOblasts =
+        fullyAlertedOblasts + partiallyAlertedOblasts
 
     // =========================================================
     // ТИПЫ ОБЪЕКТОВ
@@ -1126,7 +1231,7 @@ fun DroneTrackerScreen() {
 
                 Text(
                     text =
-                        "🚨 Тревог: ${airRaidAlerts.size}",
+                        "🚨 Тревог: $currentAlertedOblasts",
 
                     fontSize =
                         11.sp,
@@ -1138,7 +1243,7 @@ fun DroneTrackerScreen() {
 
                 Text(
                     text =
-                        "🗺 Областей: ${allAlertOblasts.size}",
+                        "🗺 Областей: $currentAlertedOblasts",
 
                     fontSize =
                         11.sp,
@@ -1150,7 +1255,7 @@ fun DroneTrackerScreen() {
 
                 Text(
                     text =
-                        "🔴 ${wholeOblastNames.size} полностью",
+                        "🔴 $fullyAlertedOblasts полностью",
 
                     fontSize =
                         11.sp
@@ -1159,7 +1264,7 @@ fun DroneTrackerScreen() {
 
                 Text(
                     text =
-                        "🟠 ${partialOblastNames.size} частично",
+                        "🟠 $partiallyAlertedOblasts частично",
 
                     fontSize =
                         11.sp
@@ -1267,172 +1372,226 @@ fun DroneTrackerScreen() {
                     ) {
 
                         // =================================================
-                        // ОБЛАСТИ
+                        // ОБЛАСТИ — АКТУАЛЬНЫЕ СТАТУСЫ
                         // =================================================
 
                         oblastPolygons.forEach { oblast ->
 
-                            val oblastName =
-                                oblast.name.trim()
+                            val oblastName = oblast.name.trim()
 
+                            // UID областей согласно API alerts.in.ua
+                            val statusUid = when (
+                                oblastName
+                                    .trim()
+                                    .lowercase()
+                            ) {
 
-                            val wholeOblastAlerts =
-                                airRaidAlerts.filter { alert ->
+                                // Хмельницкая
+                                "хмельницкая",
+                                "хмельницкая область",
+                                "хмельницька",
+                                "хмельницька область" -> 3
 
-                                    val alertOblast =
-                                        alert.location_oblast
-                                            ?.trim()
+                                // Винницкая
+                                "винницкая",
+                                "винницкая область",
+                                "винницька",
+                                "винницька область",
+                                "вінницька",
+                                "вінницька область" -> 4
 
-                                    val type =
-                                        alert.location_type
-                                            ?.trim()
-                                            ?.lowercase()
+                                // Ровенская
+                                "ровненская",
+                                "ровненская область",
+                                "рівненська",
+                                "рівненська область" -> 5
 
-                                    alertOblast?.equals(
-                                        oblastName,
-                                        ignoreCase = true
-                                    ) == true &&
-                                            type == "oblast"
+                                // Волынская
+                                "волынская",
+                                "волынская область",
+                                "волинська",
+                                "волинська область" -> 8
 
+                                // Днепропетровская
+                                "днепропетровская",
+                                "днепропетровская область",
+                                "дніпропетровська",
+                                "дніпропетровська область" -> 9
+
+                                // Житомирская
+                                "житомирская",
+                                "житомирская область",
+                                "житомирська",
+                                "житомирська область" -> 10
+
+                                // Закарпатская
+                                "закарпатская",
+                                "закарпатская область",
+                                "закарпатська",
+                                "закарпатська область" -> 11
+
+                                // Запорожская
+                                "запорожская",
+                                "запорожская область",
+                                "запорізька",
+                                "запорізька область",
+                                "запорізька обл." -> 12
+
+                                // Ивано-Франковская
+                                "ивано-франковская",
+                                "ивано-франковская область",
+                                "івано-франківська",
+                                "івано-франківська область" -> 13
+
+                                // Киевская область
+                                "киевская",
+                                "киевская область",
+                                "київська",
+                                "київська область" -> 14
+
+                                // Кировоградская
+                                "кировоградская",
+                                "кировоградская область",
+                                "кіровоградська",
+                                "кіровоградська область" -> 15
+
+                                // Луганская
+                                "луганская",
+                                "луганская область",
+                                "луганська",
+                                "луганська область" -> 16
+
+                                // Николаевская
+                                "николаевская",
+                                "николаевская область",
+                                "миколаївська",
+                                "миколаївська область" -> 17
+
+                                // Одесская
+                                "одесская",
+                                "одесская область",
+                                "одеська",
+                                "одеська область" -> 18
+
+                                // Полтавская
+                                "полтавская",
+                                "полтавская область",
+                                "полтавська",
+                                "полтавська область" -> 19
+
+                                // Сумская
+                                "сумская",
+                                "сумская область",
+                                "сумська",
+                                "сумська область" -> 20
+
+                                // Тернопольская
+                                "тернопольская",
+                                "тернопольская область",
+                                "тернопільська",
+                                "тернопільська область" -> 21
+
+                                // Харьковская
+                                "харьковская",
+                                "харьковская область",
+                                "харківська",
+                                "харківська область" -> 22
+
+                                // Херсонская
+                                "херсонская",
+                                "херсонская область",
+                                "херсонська",
+                                "херсонська область" -> 23
+
+                                // Черкасская
+                                "черкасская",
+                                "черкасская область",
+                                "черкаська",
+                                "черкаська область" -> 24
+
+                                // Черниговская
+                                "черниговская",
+                                "черниговская область",
+                                "чернігівська",
+                                "чернігівська область" -> 25
+
+                                // Черновицкая
+                                "черновицкая",
+                                "черновицкая область",
+                                "чернівецька",
+                                "чернівецька область" -> 26
+
+                                // Львовская
+                                "львовская",
+                                "львовская область",
+                                "львівська",
+                                "львівська область" -> 27
+
+                                // Донецкая
+                                "донецкая",
+                                "донецкая область",
+                                "донецька",
+                                "донецька область" -> 28
+
+                                // АР Крым
+                                "крым",
+                                "ар крым",
+                                "автономная республика крым",
+                                "автономна республіка крим" -> 29
+
+                                // Севастополь
+                                "севастополь",
+                                "місто севастополь",
+                                "город севастополь" -> 30
+
+                                else -> null
+                            }
+
+                            // Получаем актуальный статус области
+                            val currentStatus =
+                                statusUid?.let { uid ->
+                                    alertStatuses.getOrNull(uid)
                                 }
 
+                            // A = полная тревога
+                            // P = частичная тревога
+                            // N = тревоги нет
+                            val fillColor = when (currentStatus) {
 
-                            val partialOblastAlerts =
-                                airRaidAlerts.filter { alert ->
-
-                                    val alertOblast =
-                                        alert.location_oblast
-                                            ?.trim()
-
-                                    val type =
-                                        alert.location_type
-                                            ?.trim()
-                                            ?.lowercase()
-
-                                    alertOblast?.equals(
-                                        oblastName,
-                                        ignoreCase = true
-                                    ) == true &&
-
-                                            (
-                                                    type == "raion" ||
-                                                            type == "hromada" ||
-                                                            type == "city" ||
-                                                            type == "community"
-                                                    )
-
-                                }
-
-
-                            val hasWholeRed =
-                                wholeOblastAlerts.any {
-
-                                    it.alert_level
-                                        ?.equals(
-                                            "red",
-                                            ignoreCase = true
-                                        ) == true
-
-                                }
-
-
-                            val hasWholeYellow =
-                                wholeOblastAlerts.any {
-
-                                    it.alert_level
-                                        ?.equals(
-                                            "yellow",
-                                            ignoreCase = true
-                                        ) == true
-
-                                }
-
-
-                            val hasPartialRed =
-                                partialOblastAlerts.any {
-
-                                    it.alert_level
-                                        ?.equals(
-                                            "red",
-                                            ignoreCase = true
-                                        ) == true
-
-                                }
-
-
-                            val hasPartialYellow =
-                                partialOblastAlerts.any {
-
-                                    it.alert_level
-                                        ?.equals(
-                                            "yellow",
-                                            ignoreCase = true
-                                        ) == true
-
-                                }
-
-
-                            val fillColor = when {
-
-                                hasWholeRed ->
+                                'A' ->
                                     Color.Red.copy(
                                         alpha = 0.22f
                                     )
 
-                                hasWholeYellow ->
-                                    Color.Yellow.copy(
-                                        alpha = 0.20f
-                                    )
-
-                                hasPartialRed ->
-                                    Color.Red.copy(
-                                        alpha = 0.08f
-                                    )
-
-                                hasPartialYellow ->
-                                    Color.Yellow.copy(
-                                        alpha = 0.08f
+                                'P' ->
+                                    Color(0xFFFF9800).copy(
+                                        alpha = 0.22f
                                     )
 
                                 else ->
                                     Color.Transparent
-
                             }
 
+                            val strokeColor = when (currentStatus) {
 
-                            val strokeColor = when {
-
-                                hasWholeRed ->
+                                'A' ->
                                     Color.Red.copy(
-                                        alpha = 0.70f
+                                        alpha = 0.75f
                                     )
 
-                                hasWholeYellow ->
-                                    Color.Yellow.copy(
-                                        alpha = 0.70f
-                                    )
-
-                                hasPartialRed ->
-                                    Color.Red.copy(
-                                        alpha = 0.40f
-                                    )
-
-                                hasPartialYellow ->
-                                    Color.Yellow.copy(
-                                        alpha = 0.40f
+                                'P' ->
+                                    Color(0xFFFF9800).copy(
+                                        alpha = 0.75f
                                     )
 
                                 else ->
                                     Color.Transparent
-
                             }
 
-
+                            // Рисуем область только если есть актуальная тревога
                             if (
-                                hasWholeRed ||
-                                hasWholeYellow ||
-                                hasPartialRed ||
-                                hasPartialYellow
+                                currentStatus == 'A' ||
+                                currentStatus == 'P'
                             ) {
 
                                 oblast.polygons.forEach { points ->
@@ -1447,7 +1606,7 @@ fun DroneTrackerScreen() {
 
                                         strokeColor = strokeColor,
 
-                                        strokeWidth = 1.5f,
+                                        strokeWidth = 2f,
 
                                         onClick = {
 
@@ -1456,21 +1615,11 @@ fun DroneTrackerScreen() {
 
                                             selectedRaionName =
                                                 null
-
                                         }
-
                                     )
-
                                 }
-
                             }
-
                         }
-
-
-                        // =================================================
-                        // РАЙОНЫ
-                        // =================================================
 
                         raionPolygons.forEach { raion ->
 
