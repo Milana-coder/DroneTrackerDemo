@@ -1560,12 +1560,12 @@ fun DroneTrackerScreen() {
 
                                 'A' ->
                                     Color.Red.copy(
-                                        alpha = 0.22f
+                                        alpha = 0.30f
                                     )
 
                                 'P' ->
                                     Color(0xFFFF9800).copy(
-                                        alpha = 0.22f
+                                        alpha = 0.26f
                                     )
 
                                 else ->
@@ -1576,12 +1576,12 @@ fun DroneTrackerScreen() {
 
                                 'A' ->
                                     Color.Red.copy(
-                                        alpha = 0.75f
+                                        alpha = 0.90f
                                     )
 
                                 'P' ->
                                     Color(0xFFFF9800).copy(
-                                        alpha = 0.75f
+                                        alpha = 0.90f
                                     )
 
                                 else ->
