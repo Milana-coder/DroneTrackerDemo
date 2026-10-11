@@ -9,4 +9,7 @@ interface AirApi {
 
     @GET("alerts")
     suspend fun getAlerts(): AlertResponse
+
+    @GET("alert-statuses")
+    suspend fun getAlertStatuses(): AlertStatusResponse
 }

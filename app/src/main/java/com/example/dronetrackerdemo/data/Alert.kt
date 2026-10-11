@@ -29,3 +29,10 @@ data class Threat(
     val started_at: String? = null,
     val source_message: String? = null
 )
+
+data class AlertStatusResponse(
+    val success: Boolean,
+    val cached: Boolean = false,
+    val statuses: String = "",
+    val error: String? = null
+)

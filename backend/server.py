@@ -25,12 +25,30 @@ neptun_lock = threading.Lock()
 # =========================================================
 # ALERTS.IN.UA
 # =========================================================
-
 ALERTS_URL = "https://api.alerts.in.ua/v1/alerts/active.json"
+
+ALERTS_CACHE_SECONDS = 30
 
 # Токен берём из переменной окружения Windows.
 # НЕ записываем токен в код.
 ALERTS_API_TOKEN = os.getenv("ALERTS_API_TOKEN")
+
+
+# =========================================================
+# АКТУАЛЬНЫЕ СТАТУСЫ ТРЕВОГ
+# =========================================================
+
+ALERT_STATUS_URL = (
+    "https://api.alerts.in.ua/v1/iot/"
+    "active_air_raid_alerts.json"
+)
+
+alert_status_cache = {
+    "data": None,
+    "time": 0
+}
+
+ALERT_STATUS_CACHE_SECONDS = 30
 
 
 # Кэш тревог
@@ -38,9 +56,6 @@ alerts_cache = {
     "data": None,
     "time": 0
 }
-
-# 30 секунд
-ALERTS_CACHE_SECONDS = 30
 
 
 # =========================================================
@@ -631,6 +646,172 @@ def get_alerts():
             "alerts": []
         }), 500
 
+
+# =========================================================
+# АКТУАЛЬНЫЕ СТАТУСЫ ТРЕВОГ
+# =========================================================
+
+@app.route("/alert-statuses")
+def get_alert_statuses():
+
+    global alert_status_cache
+
+    # -----------------------------------------------------
+    # Проверяем токен
+    # -----------------------------------------------------
+
+    if not ALERTS_API_TOKEN:
+
+        print(
+            "ОШИБКА: "
+            "не задан ALERTS_API_TOKEN"
+        )
+
+        return jsonify({
+            "success": False,
+            "error":
+                "ALERTS_API_TOKEN is not configured",
+            "statuses": ""
+        }), 500
+
+
+    # -----------------------------------------------------
+    # Проверяем кэш
+    # -----------------------------------------------------
+
+    now = time.time()
+
+    if (
+        alert_status_cache["data"] is not None
+        and
+        now - alert_status_cache["time"]
+        <
+        ALERT_STATUS_CACHE_SECONDS
+    ):
+
+        return jsonify({
+            "success": True,
+            "cached": True,
+            "statuses":
+                alert_status_cache["data"]
+        })
+
+
+    # -----------------------------------------------------
+    # Запрашиваем актуальные статусы
+    # -----------------------------------------------------
+
+    try:
+
+        response = requests.get(
+            ALERT_STATUS_URL,
+            headers={
+                "Authorization":
+                    f"Bearer {ALERTS_API_TOKEN}"
+            },
+            timeout=10
+        )
+
+
+        if response.status_code == 401:
+
+            print(
+                "Ошибка актуальных статусов: "
+                "неверный или неактивный токен"
+            )
+
+            return jsonify({
+                "success": False,
+                "error": "Unauthorized",
+                "statuses": ""
+            }), 401
+
+
+        if response.status_code == 429:
+
+            print(
+                "Ошибка актуальных статусов: "
+                "слишком много запросов"
+            )
+
+            return jsonify({
+                "success": False,
+                "error": "Too many requests",
+                "statuses": ""
+            }), 429
+
+
+        response.raise_for_status()
+
+
+        data = response.json()
+
+
+        # API обычно возвращает строку:
+        # N / A / P для каждого UID.
+        if isinstance(data, str):
+
+            statuses = data
+
+        elif isinstance(data, list):
+
+            statuses = "".join(
+                str(item)
+                for item in data
+            )
+
+        else:
+
+            raise ValueError(
+                "Неожиданный формат ответа "
+                "active_air_raid_alerts"
+            )
+
+
+        alert_status_cache["data"] = statuses
+        alert_status_cache["time"] = now
+
+
+        print(
+            "Получены актуальные статусы тревог:",
+            len(statuses),
+            "UID"
+        )
+
+
+        return jsonify({
+            "success": True,
+            "cached": False,
+            "statuses": statuses
+        })
+
+
+    except Exception as e:
+
+        print(
+            "Ошибка актуальных статусов:",
+            e
+        )
+
+
+        # Если API временно недоступен,
+        # отдаём последний успешный результат.
+        if alert_status_cache["data"] is not None:
+
+            return jsonify({
+                "success": False,
+                "cached": True,
+                "error": str(e),
+                "statuses":
+                    alert_status_cache["data"]
+            })
+
+
+        return jsonify({
+            "success": False,
+            "error": str(e),
+            "statuses": ""
+        }), 500
 
 # =========================================================
 # START NEPTUN THREAD

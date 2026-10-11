@@ -223,13 +223,27 @@ fun DroneTrackerScreen() {
 
             try {
 
-                val alertResponse =
-                    RetrofitClient.api.getAlerts()
+                val alertResponse = RetrofitClient.api.getAlerts()
 
                 if (alertResponse.success) {
 
-                    alerts = alertResponse.alerts
+                    println(
+                        "ALERT RESPONSE: " +
+                                "получено ${alertResponse.alerts.size} записей"
+                    )
 
+                    println(
+                        "ALERT DATA: " +
+                                alertResponse.alerts.joinToString(" | ") {
+                                    "type=${it.alert_type}, " +
+                                            "locationType=${it.location_type}, " +
+                                            "oblast=${it.location_oblast}, " +
+                                            "raion=${it.location_raion}, " +
+                                            "uid=${it.location_uid}"
+                                }
+                    )
+
+                    alerts = alertResponse.alerts
                 } else {
 
                     println(
@@ -302,6 +316,7 @@ fun DroneTrackerScreen() {
     // =========================================================
 
     LaunchedEffect(alerts) {
+
 
         val oblastsWithRaionAlerts =
 
@@ -1620,11 +1635,29 @@ fun DroneTrackerScreen() {
                                 }
                             }
                         }
+// =================================================
+// РАЙОНЫ — АКТУАЛЬНЫЕ СТАТУСЫ
+//
+// alerts используем для:
+// 1. названия района
+// 2. области
+// 3. location_uid
+//
+// alertStatuses используем для:
+// A = полная тревога
+// P = частичная тревога
+// N = тревоги нет
+// =================================================
 
                         raionPolygons.forEach { raion ->
 
-                            val raionAlerts =
-                                airRaidAlerts.filter { alert ->
+                            // -------------------------------------------------
+                            // Ищем запись alerts, соответствующую этому району
+                            // -------------------------------------------------
+
+                            val raionAlert =
+
+                                alerts.firstOrNull { alert ->
 
                                     val alertRaion =
                                         alert.location_raion
@@ -1654,89 +1687,127 @@ fun DroneTrackerScreen() {
                                                 ignoreCase = true
                                             ) == true &&
 
-                                            locationType == "raion" &&
+                                            alertType == "air_raid" &&
 
-                                            alertType == "air_raid"
+                                            locationType == "raion"
+                                }
+
+
+                            // -------------------------------------------------
+                            // Получаем UID района
+                            // -------------------------------------------------
+
+                            val raionUid =
+
+                                raionAlert
+                                    ?.location_uid
+                                    ?.trim()
+                                    ?.toIntOrNull()
+
+
+                            // -------------------------------------------------
+                            // Получаем АКТУАЛЬНЫЙ статус по UID
+                            // -------------------------------------------------
+
+                            val currentStatus =
+
+                                raionUid?.let { uid ->
+
+                                    alertStatuses.getOrNull(uid)
 
                                 }
 
 
-                            val hasRed =
-                                raionAlerts.any {
+                            // -------------------------------------------------
+                            // ЦВЕТ ЗАЛИВКИ
+                            // -------------------------------------------------
 
-                                    it.alert_level
-                                        ?.equals(
-                                            "red",
-                                            ignoreCase = true
-                                        ) == true
+                            val fillColor =
+
+                                when (currentStatus) {
+
+                                    // Полная тревога
+                                    'A' ->
+
+                                        Color.Red.copy(
+                                            alpha = 0.28f
+                                        )
+
+
+                                    // Частичная тревога
+                                    'P' ->
+
+                                        Color(0xFFFF9800).copy(
+                                            alpha = 0.24f
+                                        )
+
+
+                                    // Нет тревоги / нет данных
+                                    else ->
+
+                                        Color.Transparent
 
                                 }
 
 
-                            val hasYellow =
-                                raionAlerts.any {
+                            // -------------------------------------------------
+                            // ЦВЕТ ГРАНИЦЫ
+                            // -------------------------------------------------
 
-                                    it.alert_level
-                                        ?.equals(
-                                            "yellow",
-                                            ignoreCase = true
-                                        ) == true
+                            val strokeColor =
+
+                                when (currentStatus) {
+
+                                    // Полная тревога
+                                    'A' ->
+
+                                        Color.Red.copy(
+                                            alpha = 0.85f
+                                        )
+
+
+                                    // Частичная тревога
+                                    'P' ->
+
+                                        Color(0xFFFF9800).copy(
+                                            alpha = 0.85f
+                                        )
+
+
+                                    // Нет тревоги / нет данных
+                                    else ->
+
+                                        Color.Transparent
 
                                 }
 
+
+                            // -------------------------------------------------
+                            // РИСУЕМ РАЙОН
+                            // -------------------------------------------------
 
                             if (
-                                hasRed ||
-                                hasYellow
+                                currentStatus == 'A' ||
+                                currentStatus == 'P'
                             ) {
-
-                                val fillColor =
-
-                                    if (hasRed) {
-
-                                        Color.Red.copy(
-                                            alpha = 0.25f
-                                        )
-
-                                    } else {
-
-                                        Color.Yellow.copy(
-                                            alpha = 0.22f
-                                        )
-
-                                    }
-
-
-                                val strokeColor =
-
-                                    if (hasRed) {
-
-                                        Color.Red.copy(
-                                            alpha = 0.70f
-                                        )
-
-                                    } else {
-
-                                        Color.Yellow.copy(
-                                            alpha = 0.70f
-                                        )
-
-                                    }
-
 
                                 raion.polygons.forEach { points ->
 
                                     Polygon(
 
-                                        points = points,
+                                        points =
+                                            points,
+
+                                        fillColor =
+                                            fillColor,
+
+                                        strokeColor =
+                                            strokeColor,
+
+                                        strokeWidth =
+                                            1.5f,
 
                                         clickable = true,
-
-                                        fillColor = fillColor,
-
-                                        strokeColor = strokeColor,
-
-                                        strokeWidth = 1.5f,
 
                                         onClick = {
 
@@ -1755,8 +1826,6 @@ fun DroneTrackerScreen() {
                             }
 
                         }
-
-
                         // =================================================
                         // МАРКЕРЫ ОБЪЕКТОВ
                         // =================================================
