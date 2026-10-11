@@ -23,6 +23,14 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.unit.dp
+
 import androidx.core.content.ContextCompat
 
 import com.example.dronetrackerdemo.data.Alert
@@ -1830,17 +1838,6 @@ fun DroneTrackerScreen() {
                         // МАРКЕРЫ ОБЪЕКТОВ
                         // =================================================
 
-                        val redMarkerIcon =
-                            remember {
-
-                                BitmapDescriptorFactory
-                                    .defaultMarker(
-                                        BitmapDescriptorFactory
-                                            .HUE_RED
-                                    )
-
-                            }
-
 
                         airObjects.forEach { obj ->
 
@@ -1931,6 +1928,42 @@ fun DroneTrackerScreen() {
                                 )
 
 
+                            val markerType = obj.type.trim().lowercase()
+
+                            val isFpv = markerType.contains("fpv")
+
+                            val isDrone =
+                                markerType.contains("uav") ||
+                                        markerType.contains("drone") ||
+                                        markerType.contains("бпла")
+
+                            val markerSymbol = when {
+                                isFpv -> "FPV"
+
+                                markerType.contains("kab") ||
+                                        markerType.contains("каб") ||
+                                        markerType.contains("bomb") ||
+                                        markerType.contains("бомб") -> "💣"
+
+                                markerType.contains("missile") ||
+                                        markerType.contains("rocket") ||
+                                        markerType.contains("ракета") -> "🚀"
+
+                                markerType.contains("uav") ||
+                                        markerType.contains("drone") ||
+                                        markerType.contains("бпла") -> "✈"
+
+                                else -> "✈️"
+                            }
+
+                            val markerBackground = when {
+                                isFpv -> Color(0xFFFFEB3B)
+                                markerSymbol == "💣" -> Color(0xFFFF9800)
+                                markerSymbol == "🚀" -> Color(0xFFE53935)
+                                else -> Color(0xFF1976D2)
+                            }
+
+
                             val speedText =
                                 if (obj.speedKnown) {
 
@@ -1944,92 +1977,69 @@ fun DroneTrackerScreen() {
 
 
                             // ---------------------------------------------
-                            // ОСНОВНОЙ МАРКЕР
-                            // ---------------------------------------------
-
-                            Marker(
-
-                                state =
-                                    rememberUpdatedMarkerState(
-                                        position
-                                    ),
-
-                                icon =
-                                    redMarkerIcon,
-
-                                title =
-                                    typeName,
-
-                                snippet =
-                                    """
-                                    📍 $place
-                                    
-                                    ⚡ Скорость: $speedText
-                                    🧭 Направление: $direction
-                                    📐 Курс: ${obj.heading.toInt()}°
-                                    """.trimIndent(),
-
-                                zIndex = 10f
-
-                            )
-
-
-                            // ---------------------------------------------
                             // НАЗВАНИЕ ОБЪЕКТА
                             // ---------------------------------------------
 
+
                             MarkerComposable(
+                                keys = arrayOf(
+                                    "object-icon",
+                                    obj.id,
+                                    obj.type
+                                ),
+                                state = rememberUpdatedMarkerState(position),
+                                title = typeName,
+                                snippet = """
+            📍 $place
 
-                                keys =
-                                    arrayOf(
-                                        "label",
-                                        obj.id
-                                    ),
-
-                                state =
-                                    rememberUpdatedMarkerState(
-                                        position
-                                    ),
-
-                                anchor =
-                                    Offset(
-                                        0.5f,
-                                        1.8f
-                                    ),
-
-                                zIndex = 5f
-
+            ⚡ Скорость: $speedText
+            🧭 Направление: $direction
+            📐 Курс: ${obj.heading.toInt()}°
+        """.trimIndent(),
+                                anchor = Offset(0.5f, 0.5f),
+                                zIndex = 10f
                             ) {
-
-                                Text(
-
-                                    text =
-                                        obj.name,
-
-                                    fontSize =
-                                        9.sp,
-
-                                    fontWeight =
-                                        FontWeight.Bold,
-
-                                    color =
-                                        Color.White,
-
-                                    textAlign =
-                                        TextAlign.Center,
-
-                                    maxLines = 1
-
-                                )
-
+                                if (isDrone && !isFpv) {
+                                    Text(
+                                        text = "✈",
+                                        modifier = Modifier.size(38.dp),
+                                        fontSize = 30.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.Black,
+                                        textAlign = TextAlign.Center
+                                    )
+                                } else {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(38.dp)
+                                            .clip(CircleShape)
+                                            .background(markerBackground)
+                                            .border(
+                                                width = 2.dp,
+                                                color = Color.White,
+                                                shape = CircleShape
+                                            ),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = markerSymbol,
+                                            fontSize = if (isFpv) 11.sp else 21.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = if (isFpv) Color.Black else Color.White,
+                                            textAlign = TextAlign.Center,
+                                            maxLines = 1
+                                        )
+                                    }
+                                }
                             }
+
 
 
                             // ---------------------------------------------
                             // СЛЕД
                             // ---------------------------------------------
 
-                            if (obj.trail.size > 1) {
+                            if (false && obj.trail.size > 1) {
 
                                 Polyline(
 
@@ -2051,32 +2061,6 @@ fun DroneTrackerScreen() {
                                 )
 
                             }
-
-
-                            // ---------------------------------------------
-                            // НАПРАВЛЕНИЕ
-                            // ---------------------------------------------
-
-                            Polyline(
-
-                                points =
-                                    listOf(
-
-                                        position,
-
-                                        calculateDirectionPoint(
-                                            position,
-                                            obj.heading
-                                        )
-
-                                    ),
-
-                                color =
-                                    Color.Red,
-
-                                width = 4f
-
-                            )
 
                         }
 
