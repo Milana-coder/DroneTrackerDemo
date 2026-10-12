@@ -23,6 +23,12 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
+import androidx.compose.ui.res.painterResource
+import androidx.compose.foundation.Image
+
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalFocusManager
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
@@ -31,6 +37,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 
+import androidx.compose.ui.draw.rotate
 import androidx.core.content.ContextCompat
 
 import com.example.dronetrackerdemo.data.Alert
@@ -59,6 +66,10 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.withContext
 
 
@@ -130,6 +141,35 @@ fun DroneTrackerScreen() {
     }
 
     val context = LocalContext.current
+
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
+
+    var settlementName by remember {
+        mutableStateOf("")
+    }
+
+    var warningDistanceKm by remember {
+        mutableIntStateOf(30)
+    }
+
+    var settlementCoordinates by remember {
+        mutableStateOf<com.google.android.gms.maps.model.LatLng?>(null)
+    }
+
+    var settlementSearchMessage by remember {
+        mutableStateOf("")
+    }
+
+    val voiceAlertManager = remember {
+        VoiceAlertManager(context)
+    }
+
+    DisposableEffect(voiceAlertManager) {
+        onDispose {
+            voiceAlertManager.release()
+        }
+    }
     // =========================================================
     // ГЕОЛОКАЦИЯ
     // =========================================================
@@ -1006,6 +1046,92 @@ fun DroneTrackerScreen() {
                 Alignment.CenterHorizontally
 
         ) {
+
+            // ВЫБОР НАСЕЛЁННОГО ПУНКТА
+            OutlinedTextField(
+                value = settlementName,
+                onValueChange = {
+                    settlementName = it
+                },
+                label = {
+                    Text("Населённый пункт")
+                },
+                placeholder = {
+                    Text("Например, Змиёв")
+                },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Spacer(
+                modifier = Modifier.height(8.dp)
+            )
+
+            Text(
+                text = "Порог предупреждения: $warningDistanceKm км",
+                fontSize = 14.sp
+            )
+
+            Slider(
+                value = warningDistanceKm.toFloat(),
+                onValueChange = {
+                    warningDistanceKm = it.toInt()
+                },
+                valueRange = 5f..100f,
+                steps = 18
+            )
+
+            Button(
+                onClick = {
+
+                    keyboardController?.hide()
+                    focusManager.clearFocus()
+
+                    if (settlementName.isBlank()) {
+                        settlementSearchMessage = "Введите населённый пункт"
+                    } else {
+                        settlementSearchMessage = "Поиск координат..."
+
+                        kotlinx.coroutines.CoroutineScope(
+                            kotlinx.coroutines.Dispatchers.Main
+                        ).launch {
+                            val result = kotlinx.coroutines.withContext(
+                                kotlinx.coroutines.Dispatchers.IO
+                            ) {
+                                SettlementGeocoder(context)
+                                    .findSettlement(settlementName.trim())
+                            }
+
+                            if (result != null) {
+                                settlementCoordinates = result
+
+                                cameraPositionState.animate(
+                                    com.google.android.gms.maps.CameraUpdateFactory.newLatLngZoom(
+                                        result,
+                                        10f
+                                    )
+                                )
+                                settlementSearchMessage =
+                                    "Координаты найдены: ${"%.4f".format(result.latitude)}, ${
+                                        "%.4f".format(
+                                            result.longitude
+                                        )
+                                    }"
+                            } else {
+                                settlementSearchMessage =
+                                    "Не удалось найти. Проверьте название и подключение к интернету."
+                            }
+                        }
+                    }
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Найти населённый пункт")
+            }
+
+            if (settlementSearchMessage.isNotBlank()) {
+                Text(text = settlementSearchMessage)
+            }
 
             // =================================================
             // СТАТУС
@@ -1916,16 +2042,22 @@ fun DroneTrackerScreen() {
                             }
 
 
-                            val direction =
-                                headingToDirection(
-                                    obj.heading
-                                )
+                            val direction = when (obj.heading.toInt()) {
+                                in 337..359, in 0..22 -> "С"
+                                in 23..67 -> "СВ"
+                                in 68..112 -> "В"
+                                in 113..157 -> "ЮВ"
+                                in 158..202 -> "Ю"
+                                in 203..247 -> "ЮЗ"
+                                in 248..292 -> "З"
+                                in 293..336 -> "СЗ"
+                                else -> "—"
+                            }
 
 
-                            val typeName =
-                                objectTypeName(
-                                    obj.type
-                                )
+                            val typeName = obj.type
+                                .replace("_", " ")
+                                .uppercase()
 
 
                             val markerType = obj.type.trim().lowercase()
@@ -1936,6 +2068,13 @@ fun DroneTrackerScreen() {
                                 markerType.contains("uav") ||
                                         markerType.contains("drone") ||
                                         markerType.contains("бпла")
+
+                            val isKab =
+                                markerType.contains("kab") ||
+                                        markerType.contains("каб") ||
+                                        markerType.contains("bomb") ||
+                                        markerType.contains("бомб") ||
+                                        markerType.contains("guided_aerial")
 
                             val markerSymbol = when {
                                 isFpv -> "FPV"
@@ -1985,7 +2124,8 @@ fun DroneTrackerScreen() {
                                 keys = arrayOf(
                                     "object-icon",
                                     obj.id,
-                                    obj.type
+                                    obj.type,
+                                    obj.heading
                                 ),
                                 state = rememberUpdatedMarkerState(position),
                                 title = typeName,
@@ -1999,10 +2139,34 @@ fun DroneTrackerScreen() {
                                 anchor = Offset(0.5f, 0.5f),
                                 zIndex = 10f
                             ) {
-                                if (isDrone && !isFpv) {
+
+                                if (isKab) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(38.dp)
+                                            .clip(CircleShape)
+                                            .background(Color(0xFF424242))
+                                            .border(
+                                                width = 2.dp,
+                                                color = Color.White,
+                                                shape = CircleShape
+                                            ),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Image(
+                                            painter = painterResource(id = R.drawable.kab_marker),
+                                            contentDescription = "КАБ",
+                                            modifier = Modifier
+                                                .size(25.dp)
+                                                .rotate(obj.heading.toFloat())
+                                        )
+                                    }
+                                } else if (isDrone && !isFpv) {
                                     Text(
                                         text = "✈",
-                                        modifier = Modifier.size(38.dp),
+                                        modifier = Modifier
+                                            .size(38.dp)
+                                            .rotate(obj.heading.toFloat()),
                                         fontSize = 30.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = Color.Black,
@@ -2031,170 +2195,130 @@ fun DroneTrackerScreen() {
                                         )
                                     }
                                 }
-                            }
 
 
+                                // ---------------------------------------------
+                                // СЛЕД
+                                // ---------------------------------------------
 
-                            // ---------------------------------------------
-                            // СЛЕД
-                            // ---------------------------------------------
+                                if (false && obj.trail.size > 1) {
 
-                            if (false && obj.trail.size > 1) {
+                                    Polyline(
 
-                                Polyline(
+                                        points =
+                                            obj.trail.map {
 
-                                    points =
-                                        obj.trail.map {
+                                                LatLng(
+                                                    it.lat,
+                                                    it.lon
+                                                )
 
-                                            LatLng(
-                                                it.lat,
-                                                it.lon
-                                            )
+                                            },
 
-                                        },
+                                        color =
+                                            Color.Red,
 
-                                    color =
-                                        Color.Red,
-
-                                    width = 4f
-
-                                )
-
-                            }
-
-                        }
-
-                    }
-
-
-                    // =================================================
-                    // КАРТОЧКА ВЫБРАННОЙ ОБЛАСТИ / РАЙОНА
-                    // =================================================
-
-                    if (selectedOblastName != null) {
-
-                        Surface(
-
-                            modifier =
-                                Modifier
-                                    .align(
-                                        Alignment.BottomCenter
-                                    )
-                                    .padding(8.dp),
-
-                            shape =
-                                MaterialTheme
-                                    .shapes
-                                    .medium,
-
-                            shadowElevation =
-                                6.dp,
-
-                            tonalElevation =
-                                6.dp
-
-                        ) {
-
-                            Column(
-
-                                modifier =
-                                    Modifier
-                                        .padding(12.dp)
-                                        .widthIn(
-                                            max = 340.dp
-                                        )
-
-                            ) {
-
-                                Text(
-
-                                    text =
-                                        if (
-                                            selectedRaionName != null
-                                        ) {
-
-                                            "📍 $selectedRaionName"
-
-                                        } else {
-
-                                            "📍 $selectedOblastName"
-
-                                        },
-
-                                    fontWeight =
-                                        FontWeight.Bold,
-
-                                    fontSize =
-                                        15.sp
-
-                                )
-
-
-                                if (
-                                    selectedRaionName != null
-                                ) {
-
-                                    Text(
-
-                                        text =
-                                            "Область: $selectedOblastName",
-
-                                        fontSize =
-                                            11.sp
+                                        width = 4f
 
                                     )
 
                                 }
 
+                            }
 
-                                Spacer(
+                        }
+
+
+                        // =================================================
+                        // КАРТОЧКА ВЫБРАННОЙ ОБЛАСТИ / РАЙОНА
+                        // =================================================
+
+                        if (selectedOblastName != null) {
+
+                            Surface(
+
+                                modifier =
+                                    Modifier
+                                        .align(
+                                            Alignment.BottomCenter
+                                        )
+                                        .padding(8.dp),
+
+                                shape =
+                                    MaterialTheme
+                                        .shapes
+                                        .medium,
+
+                                shadowElevation =
+                                    6.dp,
+
+                                tonalElevation =
+                                    6.dp
+
+                            ) {
+
+                                Column(
+
                                     modifier =
-                                        Modifier.height(4.dp)
-                                )
+                                        Modifier
+                                            .padding(12.dp)
+                                            .widthIn(
+                                                max = 340.dp
+                                            )
 
-
-                                Text(
-
-                                    text =
-                                        "🚨 Воздушных тревог: ${selectedAirRaidAlerts.size}",
-
-                                    fontSize =
-                                        12.sp
-
-                                )
-
-
-                                Text(
-
-                                    text =
-                                        "🗺 Районных записей: ${selectedRaionAlerts.size}",
-
-                                    fontSize =
-                                        12.sp
-
-                                )
-
-
-                                // -----------------------------------------
-                                // УГРОЗЫ
-                                // -----------------------------------------
-
-                                if (
-                                    selectedThreatTypes.isNotEmpty()
                                 ) {
+
+                                    Text(
+
+                                        text =
+                                            if (
+                                                selectedRaionName != null
+                                            ) {
+
+                                                "📍 $selectedRaionName"
+
+                                            } else {
+
+                                                "📍 $selectedOblastName"
+
+                                            },
+
+                                        fontWeight =
+                                            FontWeight.Bold,
+
+                                        fontSize =
+                                            15.sp
+
+                                    )
+
+
+                                    if (
+                                        selectedRaionName != null
+                                    ) {
+
+                                        Text(
+
+                                            text =
+                                                "Область: $selectedOblastName",
+
+                                            fontSize =
+                                                11.sp
+
+                                        )
+
+                                    }
+
 
                                     Spacer(
                                         modifier =
                                             Modifier.height(4.dp)
                                     )
 
+
                                     Text(
 
                                         text =
-                                            "⚠️ Угрозы:",
-
-                                        fontWeight =
-                                            FontWeight.Bold,
+                                            "🚨 Воздушных тревог: ${selectedAirRaidAlerts.size}",
 
                                         fontSize =
                                             12.sp
@@ -2202,83 +2326,117 @@ fun DroneTrackerScreen() {
                                     )
 
 
-                                    selectedThreatTypes
-                                        .forEach { threat ->
+                                    Text(
 
-                                            Text(
+                                        text =
+                                            "🗺 Районных записей: ${selectedRaionAlerts.size}",
 
-                                                text =
-                                                    threatDisplayName(
-                                                        threat
-                                                    ),
+                                        fontSize =
+                                            12.sp
 
-                                                fontSize =
-                                                    11.sp
-
-                                            )
-
-                                        }
-
-                                }
+                                    )
 
 
-                                // -----------------------------------------
-                                // ДРУГИЕ ТИПЫ ТРЕВОГ
-                                // -----------------------------------------
+                                    // -----------------------------------------
+                                    // УГРОЗЫ
+                                    // -----------------------------------------
 
-                                if (
-                                    selectedOtherThreatTypes
-                                        .isNotEmpty()
-                                ) {
+                                    if (
+                                        selectedThreatTypes.isNotEmpty()
+                                    ) {
+
+                                        Spacer(
+                                            modifier =
+                                                Modifier.height(4.dp)
+                                        )
+
+                                        Text(
+
+                                            text =
+                                                "⚠️ Угрозы:",
+
+                                            fontWeight =
+                                                FontWeight.Bold,
+
+                                            fontSize =
+                                                12.sp
+
+                                        )
+
+
+                                        selectedThreatTypes
+                                            .forEach { threat ->
+
+                                                Text(
+
+                                                    text = threat,
+
+                                                    fontSize =
+                                                        11.sp
+
+                                                )
+
+                                            }
+
+                                    }
+
+
+                                    // -----------------------------------------
+                                    // ДРУГИЕ ТИПЫ ТРЕВОГ
+                                    // -----------------------------------------
+
+                                    if (
+                                        selectedOtherThreatTypes
+                                            .isNotEmpty()
+                                    ) {
+
+                                        Spacer(
+                                            modifier =
+                                                Modifier.height(4.dp)
+                                        )
+
+                                        selectedOtherThreatTypes
+                                            .forEach { type ->
+
+                                                Text(
+
+                                                    text = type,
+
+                                                    fontSize =
+                                                        11.sp
+
+                                                )
+
+                                            }
+
+                                    }
+
 
                                     Spacer(
                                         modifier =
                                             Modifier.height(4.dp)
                                     )
 
-                                    selectedOtherThreatTypes
-                                        .forEach { type ->
 
-                                            Text(
+                                    TextButton(
 
-                                                text =
-                                                    alertTypeDisplayName(
-                                                        type
-                                                    ),
+                                        onClick = {
 
-                                                fontSize =
-                                                    11.sp
+                                            selectedOblastName =
+                                                null
 
-                                            )
+                                            selectedRaionName =
+                                                null
 
                                         }
 
-                                }
+                                    ) {
 
-
-                                Spacer(
-                                    modifier =
-                                        Modifier.height(4.dp)
-                                )
-
-
-                                TextButton(
-
-                                    onClick = {
-
-                                        selectedOblastName =
-                                            null
-
-                                        selectedRaionName =
-                                            null
+                                        Text(
+                                            "Закрыть"
+                                        )
 
                                     }
-
-                                ) {
-
-                                    Text(
-                                        "Закрыть"
-                                    )
 
                                 }
 
@@ -2296,214 +2454,213 @@ fun DroneTrackerScreen() {
 
     }
 
-}
-
 
 // =============================================================
 // НАЗВАНИЕ ТИПА ОБЪЕКТА
 // =============================================================
 
-fun objectTypeName(
-    type: String
-): String {
+    fun objectTypeName(
+        type: String
+    ): String {
 
-    return when (
-        type.trim().lowercase()
-    ) {
+        return when (
+            type.trim().lowercase()
+        ) {
 
-        "uav" ->
-            "БПЛА"
+            "uav" ->
+                "БПЛА"
 
-        "drone" ->
-            "БПЛА"
+            "drone" ->
+                "БПЛА"
 
-        "бпла" ->
-            "БПЛА"
+            "бпла" ->
+                "БПЛА"
 
-        "fpv" ->
-            "FPV"
+            "fpv" ->
+                "FPV"
 
-        "missile" ->
-            "РАКЕТА"
+            "missile" ->
+                "РАКЕТА"
 
-        "rocket" ->
-            "РАКЕТА"
+            "rocket" ->
+                "РАКЕТА"
 
-        "ракета" ->
-            "РАКЕТА"
+            "ракета" ->
+                "РАКЕТА"
 
-        else ->
-            type
-                .trim()
-                .uppercase()
+            else ->
+                type
+                    .trim()
+                    .uppercase()
+
+        }
 
     }
-
-}
 
 
 // =============================================================
 // КУРС → СТОРОНА СВЕТА
 // =============================================================
 
-fun headingToDirection(
-    heading: Double
-): String {
+    fun headingToDirection(
+        heading: Double
+    ): String {
 
-    val h =
-        ((heading % 360) + 360) % 360
+        val h =
+            ((heading % 360) + 360) % 360
 
-    return when {
+        return when {
 
-        h >= 337.5 ||
-                h < 22.5 ->
+            h >= 337.5 ||
+                    h < 22.5 ->
 
-            "С"
+                "С"
 
-        h < 67.5 ->
+            h < 67.5 ->
 
-            "СВ"
+                "СВ"
 
-        h < 112.5 ->
+            h < 112.5 ->
 
-            "В"
+                "В"
 
-        h < 157.5 ->
+            h < 157.5 ->
 
-            "ЮВ"
+                "ЮВ"
 
-        h < 202.5 ->
+            h < 202.5 ->
 
-            "Ю"
+                "Ю"
 
-        h < 247.5 ->
+            h < 247.5 ->
 
-            "ЮЗ"
+                "ЮЗ"
 
-        h < 292.5 ->
+            h < 292.5 ->
 
-            "З"
+                "З"
 
-        else ->
+            else ->
 
-            "СЗ"
+                "СЗ"
+
+        }
 
     }
-
-}
 
 
 // =============================================================
 // ТОЧКА ДЛЯ ЛИНИИ НАПРАВЛЕНИЯ
 // =============================================================
 
-fun calculateDirectionPoint(
-    position: LatLng,
-    heading: Double,
-    distance: Double = 0.05
-): LatLng {
+    fun calculateDirectionPoint(
+        position: LatLng,
+        heading: Double,
+        distance: Double = 0.05
+    ): LatLng {
 
-    val radians =
-        Math.toRadians(
-            heading
+        val radians =
+            Math.toRadians(
+                heading
+            )
+
+        return LatLng(
+
+            position.latitude +
+                    distance *
+                    kotlin.math.cos(
+                        radians
+                    ),
+
+            position.longitude +
+                    distance *
+                    kotlin.math.sin(
+                        radians
+                    )
+
         )
 
-    return LatLng(
-
-        position.latitude +
-                distance *
-                kotlin.math.cos(
-                    radians
-                ),
-
-        position.longitude +
-                distance *
-                kotlin.math.sin(
-                    radians
-                )
-
-    )
-
-}
+    }
 
 
 // =============================================================
 // НАЗВАНИЕ УГРОЗЫ
 // =============================================================
 
-fun threatDisplayName(
-    type: String
-): String {
+    fun threatDisplayName(
+        type: String
+    ): String {
 
-    return when (
-        type.trim().lowercase()
-    ) {
+        return when (
+            type.trim().lowercase()
+        ) {
 
-        "drones" ->
-            "🛸 Дроны"
+            "drones" ->
+                "🛸 Дроны"
 
-        "cruise_missiles" ->
-            "🚀 Крылатые ракеты"
+            "cruise_missiles" ->
+                "🚀 Крылатые ракеты"
 
-        "ballistic_missiles" ->
-            "☄️ Баллистическая угроза"
+            "ballistic_missiles" ->
+                "☄️ Баллистическая угроза"
 
-        "guided_aerial_bombs" ->
-            "💣 КАБы"
+            "guided_aerial_bombs" ->
+                "💣 КАБы"
 
-        "tactic_aircraft_activity" ->
-            "✈️ Тактическая авиация"
+            "tactic_aircraft_activity" ->
+                "✈️ Тактическая авиация"
 
-        "strategic_aircraft_activity" ->
-            "✈️ Стратегическая авиация"
+            "strategic_aircraft_activity" ->
+                "✈️ Стратегическая авиация"
 
-        "mig31k_departure" ->
-            "⚠️ Вылет МиГ-31К"
+            "mig31k_departure" ->
+                "⚠️ Вылет МиГ-31К"
 
-        "unspecified_missiles" ->
-            "🚀 Неуточнённая ракетная угроза"
+            "unspecified_missiles" ->
+                "🚀 Неуточнённая ракетная угроза"
 
-        "air_defense" ->
-            "🛡 Работа ПВО"
+            "air_defense" ->
+                "🛡 Работа ПВО"
 
-        "unknown" ->
-            "❓ Неизвестная угроза"
+            "unknown" ->
+                "❓ Неизвестная угроза"
 
-        else ->
-            "❓ $type"
+            else ->
+                "❓ $type"
+
+        }
 
     }
-
-}
 
 
 // =============================================================
 // НАЗВАНИЕ ТИПА ТРЕВОГИ
 // =============================================================
 
-fun alertTypeDisplayName(
-    type: String
-): String {
+    fun alertTypeDisplayName(
+        type: String
+    ): String {
 
-    return when (
-        type.trim().lowercase()
-    ) {
+        return when (
+            type.trim().lowercase()
+        ) {
 
-        "artillery_shelling" ->
-            "🟠 Артиллерийский обстрел"
+            "artillery_shelling" ->
+                "🟠 Артиллерийский обстрел"
 
-        "urban_fights" ->
-            "🟣 Уличные бои"
+            "urban_fights" ->
+                "🟣 Уличные бои"
 
-        "chemical" ->
-            "🟢 Химическая угроза"
+            "chemical" ->
+                "🟢 Химическая угроза"
 
-        "nuclear" ->
-            "🟡 Ядерная угроза"
+            "nuclear" ->
+                "🟡 Ядерная угроза"
 
-        else ->
-            "⚠️ $type"
+            else ->
+                "⚠️ $type"
+
+        }
 
     }
-
 }
