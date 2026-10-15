@@ -1,4 +1,8 @@
+
 package com.example.dronetrackerdemo
 
-class LocationSettings {
-}
+data class LocationSettings(
+    val settlementName: String = "",
+    val warningDistanceKm: Int = 30,
+    val voiceAlertsEnabled: Boolean = true
+)

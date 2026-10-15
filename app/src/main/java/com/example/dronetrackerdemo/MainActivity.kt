@@ -5,6 +5,11 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Bundle
 
+import kotlin.math.atan2
+import kotlin.math.cos
+import kotlin.math.sin
+import kotlin.math.sqrt
+
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -22,6 +27,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.res.painterResource
 
 import androidx.compose.ui.res.painterResource
 import androidx.compose.foundation.Image
@@ -90,6 +101,26 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+private fun calculateDistanceKm(
+    lat1: Double,
+    lon1: Double,
+    lat2: Double,
+    lon2: Double
+): Double {
+    val earthRadiusKm = 6371.0
+
+    val dLat = Math.toRadians(lat2 - lat1)
+    val dLon = Math.toRadians(lon2 - lon1)
+
+    val a = sin(dLat / 2) * sin(dLat / 2) +
+            cos(Math.toRadians(lat1)) *
+            cos(Math.toRadians(lat2)) *
+            sin(dLon / 2) * sin(dLon / 2)
+
+    val c = 2 * atan2(sqrt(a), sqrt(1 - a))
+
+    return earthRadiusKm * c
+}
 
 // =============================================================
 // ОСНОВНОЙ ЭКРАН
@@ -163,6 +194,11 @@ fun DroneTrackerScreen() {
 
     val voiceAlertManager = remember {
         VoiceAlertManager(context)
+    }
+
+    // История предупреждений для каждого объекта
+    val announcedDistances = remember {
+        mutableMapOf<String, MutableSet<Int>>()
     }
 
     DisposableEffect(voiceAlertManager) {
@@ -246,24 +282,63 @@ fun DroneTrackerScreen() {
 
         while (monitoring) {
 
-            // =================================================
-            // ОБЪЕКТЫ NEPTUN
-            // =================================================
 
             try {
-
-                val newObjects =
-                    RetrofitClient.api.getObjects()
-
+                val newObjects = RetrofitClient.api.getObjects()
                 airObjects = newObjects
 
+                val settlement = settlementCoordinates
+
+                if (settlement != null) {
+                    for (obj in newObjects) {
+                        val distance = calculateDistanceKm(
+                            settlement.latitude,
+                            settlement.longitude,
+                            obj.lat,
+                            obj.lon
+                        )
+
+                        val history = announcedDistances.getOrPut(obj.id) {
+                            mutableSetOf()
+                        }
+
+                        // Первое предупреждение в заданном радиусе
+                        if (
+                            distance <= warningDistanceKm &&
+                            history.add(0)
+                        ) {
+                            voiceAlertManager.speak(
+                                "Внимание! Объект ${obj.name}. " +
+                                        "Расстояние до населённого пункта " +
+                                        "$settlementName — " +
+                                        "${distance.toInt()} километров."
+                            )
+
+                            // Запоминаем отметки, которые объект уже прошёл
+                            if (distance <= 20) history.add(20)
+                            if (distance <= 10) history.add(10)
+                            if (distance <= 5) history.add(5)
+                        }
+
+                        // Последующие предупреждения
+                        for (mark in listOf(20, 10, 5)) {
+                            if (
+                                distance <= mark &&
+                                distance <= warningDistanceKm &&
+                                history.add(mark)
+                            ) {
+                                voiceAlertManager.speak(
+                                    "Внимание! Объект ${obj.name}. " +
+                                            "Расстояние до $settlementName — " +
+                                            "$mark километров."
+                                )
+                            }
+                        }
+                    }
+                }
             } catch (e: Exception) {
-
-                println(
-                    "ОШИБКА OBJECTS: ${e.message}"
-                )
+                println("ОШИБКА OBJECTS: ${e.message}")
             }
-
 
             // =================================================
             // АКТИВНЫЕ ТРЕВОГИ
@@ -1081,6 +1156,7 @@ fun DroneTrackerScreen() {
                 steps = 18
             )
 
+
             Button(
                 onClick = {
 
@@ -1285,17 +1361,20 @@ fun DroneTrackerScreen() {
 
                     // БПЛА
 
-                    if (uavObjects.isNotEmpty()) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(3.dp)
+                    ) {
+                        Image(
+                            painter = painterResource(id = R.drawable.ic_drone),
+                            contentDescription = "БПЛА",
+                            modifier = Modifier.size(14.dp)
+                        )
 
                         Text(
-                            text =
-                                "🛸 БПЛА: ${uavObjects.size}",
-
-                            fontSize =
-                                11.sp,
-
-                            fontWeight =
-                                FontWeight.Bold
+                            text = "БПЛА: ${uavObjects.size}",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
                         )
                     }
 
@@ -1319,19 +1398,27 @@ fun DroneTrackerScreen() {
 
                     // КАБ
 
+
                     if (kabObjects.isNotEmpty()) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Image(
+                                painter = painterResource(id = R.drawable.kab_marker),
+                                contentDescription = "КАБ",
+                                modifier = Modifier.size(16.dp)
+                            )
 
-                        Text(
-                            text =
-                                "💣 КАБ: ${kabObjects.size}",
+                            Spacer(modifier = Modifier.width(3.dp))
 
-                            fontSize =
-                                11.sp,
-
-                            fontWeight =
-                                FontWeight.Bold
-                        )
+                            Text(
+                                text = "КАБ: ${kabObjects.size}",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                     }
+
 
 
                     // FPV
@@ -1339,8 +1426,7 @@ fun DroneTrackerScreen() {
                     if (fpvObjects.isNotEmpty()) {
 
                         Text(
-                            text =
-                                "🎯 FPV: ${fpvObjects.size}",
+                            text = "🟡 FPV: ${fpvObjects.size}",
 
                             fontSize =
                                 11.sp,
@@ -1701,6 +1787,9 @@ fun DroneTrackerScreen() {
                                 statusUid?.let { uid ->
                                     alertStatuses.getOrNull(uid)
                                 }
+
+                            println("ОБЛАСТЬ: $oblastName, СТАТУС: $currentStatus")
+
 
                             // A = полная тревога
                             // P = частичная тревога
@@ -2140,15 +2229,16 @@ fun DroneTrackerScreen() {
                                 zIndex = 10f
                             ) {
 
+
                                 if (isKab) {
                                     Box(
                                         modifier = Modifier
                                             .size(38.dp)
                                             .clip(CircleShape)
-                                            .background(Color(0xFF424242))
+                                            .background(Color.White)
                                             .border(
                                                 width = 2.dp,
-                                                color = Color.White,
+                                                color = Color(0xFFE53935),
                                                 shape = CircleShape
                                             ),
                                         contentAlignment = Alignment.Center
@@ -2161,17 +2251,16 @@ fun DroneTrackerScreen() {
                                                 .rotate(obj.heading.toFloat())
                                         )
                                     }
+
                                 } else if (isDrone && !isFpv) {
-                                    Text(
-                                        text = "✈",
+                                    Image(
+                                        painter = painterResource(id = R.drawable.ic_drone),
+                                        contentDescription = "БПЛА",
                                         modifier = Modifier
-                                            .size(38.dp)
-                                            .rotate(obj.heading.toFloat()),
-                                        fontSize = 30.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = Color.Black,
-                                        textAlign = TextAlign.Center
+                                            .size(30.dp)
+                                            .rotate(obj.heading.toFloat())
                                     )
+
                                 } else {
                                     Box(
                                         modifier = Modifier

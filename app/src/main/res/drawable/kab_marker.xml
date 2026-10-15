@@ -1,36 +1,25 @@
 
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="48dp"
-    android:height="24dp"
-    android:viewportWidth="48"
-    android:viewportHeight="24">
+    android:height="48dp"
+    android:viewportWidth="100"
+    android:viewportHeight="100">
 
-    <!-- Тёмный корпус КАБ -->
+    <!-- Белый круг с красной окантовкой -->
     <path
-        android:fillColor="#29251F"
-        android:pathData="M5,10 L35,10 L42,12 L35,14 L5,14 Z" />
+        android:fillColor="#FFFFFFFF"
+        android:strokeColor="#FFD32F2F"
+        android:strokeWidth="6"
+        android:pathData="M50,4 A46,46 0,1 1,50 96 A46,46 0,1 1,50 4 Z" />
 
-    <!-- Носовая часть -->
+    <!-- Корпус авиабомбы -->
     <path
-        android:fillColor="#29251F"
-        android:pathData="M35,10 L46,12 L35,14 Z" />
+        android:fillColor="#FFD32F2F"
+        android:pathData="M25,45 L63,45 Q70,45 76,50 Q70,55 63,55 L25,55 Z" />
 
     <!-- Хвостовое оперение -->
     <path
-        android:fillColor="#29251F"
-        android:pathData="M8,10 L3,5 L14,10 Z" />
-
-    <path
-        android:fillColor="#29251F"
-        android:pathData="M8,14 L3,19 L14,14 Z" />
-
-    <!-- Крылья -->
-    <path
-        android:fillColor="#3A3329"
-        android:pathData="M19,10 L14,3 L27,10 Z" />
-
-    <path
-        android:fillColor="#3A3329"
-        android:pathData="M19,14 L14,21 L27,14 Z" />
+        android:fillColor="#FFD32F2F"
+        android:pathData="M28,45 L19,37 L22,47 Z M28,55 L19,63 L22,53 Z" />
 
 </vector>
