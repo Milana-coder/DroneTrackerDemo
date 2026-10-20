@@ -547,15 +547,37 @@ def start_neptun_worker():
     thread.start()
 
 
+
+# =========================================================
+# START NEPTUN WORKER
+# =========================================================
+
+_neptun_worker_started = False
+_neptun_worker_start_lock = threading.Lock()
+
+
+def ensure_neptun_worker_started():
+    global _neptun_worker_started
+
+    with _neptun_worker_start_lock:
+        if _neptun_worker_started:
+            return
+
+        start_neptun_worker()
+        _neptun_worker_started = True
+
+
 # =========================================================
 # START LOCAL SERVER
 # =========================================================
 
 if __name__ == "__main__":
-    start_neptun_worker()
+    ensure_neptun_worker_started()
 
     app.run(
         host="0.0.0.0",
         port=8000,
         threaded=True,
     )
+else:
+    ensure_neptun_worker_started()
