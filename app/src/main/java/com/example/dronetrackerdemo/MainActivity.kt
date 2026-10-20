@@ -340,99 +340,65 @@ fun DroneTrackerScreen() {
                 println("ОШИБКА OBJECTS: ${e.message}")
             }
 
-            // =================================================
-            // АКТИВНЫЕ ТРЕВОГИ
-            // =================================================
+
+// =================================================
+// АКТИВНЫЕ ТРЕВОГИ
+// =================================================
 
             try {
-
                 val alertResponse = RetrofitClient.api.getAlerts()
 
-                if (alertResponse.success) {
+                // Обновляем список только после успешного получения ответа.
+                // Если запрос завершится исключением, старые данные сохранятся.
+                alerts = alertResponse.alerts
 
-                    println(
-                        "ALERT RESPONSE: " +
-                                "получено ${alertResponse.alerts.size} записей"
-                    )
-
-                    println(
-                        "ALERT DATA: " +
-                                alertResponse.alerts.joinToString(" | ") {
-                                    "type=${it.alert_type}, " +
-                                            "locationType=${it.location_type}, " +
-                                            "oblast=${it.location_oblast}, " +
-                                            "raion=${it.location_raion}, " +
-                                            "uid=${it.location_uid}"
-                                }
-                    )
-
-                    alerts = alertResponse.alerts
-                } else {
-
-                    println(
-                        "ALERTS: сервер вернул success=false, " +
-                                "error=${alertResponse.error}"
-                    )
-                }
-
-            } catch (e: Exception) {
+                println("ALERT RESPONSE: получено ${alerts.size} записей")
 
                 println(
-                    "ОШИБКА ALERTS: ${e.message}"
+                    "ALERT DATA: " +
+                            alerts.joinToString(" | ") {
+                                "type=${it.alert_type}, " +
+                                        "locationType=${it.location_type}, " +
+                                        "oblast=${it.location_oblast}, " +
+                                        "raion=${it.location_raion}, " +
+                                        "uid=${it.location_uid}, " +
+                                        "level=${it.alert_level}, " +
+                                        "finishedAt=${it.finished_at}, " +
+                                        "updatedAt=${it.updated_at}"
+                            }
                 )
+            } catch (e: Exception) {
+                println("ОШИБКА ALERTS: ${e.message}")
             }
 
 
             // =================================================
-            // АКТУАЛЬНЫЕ СТАТУСЫ ТРЕВОГ
+            // ЗАГРУЗКА АКТУАЛЬНЫХ СТАТУСОВ ТРЕВОГ
             // =================================================
-
             try {
-
                 val statusResponse =
                     RetrofitClient.api.getAlertStatuses()
 
                 if (statusResponse.success) {
-
                     alertStatuses = statusResponse.statuses
-
                     println(
                         "СТАТУСЫ: получено ${alertStatuses.length} символов"
                     )
-
-                    println(
-                        "СТАТУСЫ ОБЛАСТЕЙ: " +
-                                "Полтава=${alertStatuses.getOrNull(19)}, " +
-                                "Сумы=${alertStatuses.getOrNull(20)}, " +
-                                "Харьков=${alertStatuses.getOrNull(22)}, " +
-                                "Донецк=${alertStatuses.getOrNull(28)}, " +
-                                "Запорожье=${alertStatuses.getOrNull(12)}"
-                    )
-
                 } else {
-
                     println(
-                        "СТАТУСЫ: сервер вернул success=false, " +
-                                "error=${statusResponse.error}"
+                        "ОШИБКА STATUSES: ${statusResponse.error}"
                     )
                 }
-
             } catch (e: Exception) {
-
-                println(
-                    "ОШИБКА STATUSES: ${e.message}"
-                )
+                println("ОШИБКА STATUSES: ${e.message}")
             }
 
 
-            println(
-                "АЛЕРТЫ: ${alerts.size}"
-            )
+            println("АЛЕРТЫ: ${alerts.size}")
 
             delay(3000)
         }
     }
-
 
     // =========================================================
     // ЗАГРУЗКА РАЙОНОВ

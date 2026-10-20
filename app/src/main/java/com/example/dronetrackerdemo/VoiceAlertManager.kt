@@ -29,7 +29,7 @@ class VoiceAlertManager(context: Context) {
         if (ready) {
             tts?.speak(
                 message,
-                TextToSpeech.QUEUE_FLUSH,
+                TextToSpeech.QUEUE_ADD,
                 null,
                 "threat_warning"
             )

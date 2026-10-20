@@ -1,0 +1,14 @@
+
+[
+  {
+    "id": "event-001",
+    "type": "impact",
+    "settlement": "Пример населённого пункта",
+    "event_date": "2026-10-10",
+    "published_at": "2026-10-10T14:30:00Z",
+    "source_name": "Тестовая запись",
+    "source_url": "https://example.com/",
+    "verification": "test",
+    "description": "Тестовая запись для проверки формата данных."
+  }
+]
